@@ -1,0 +1,176 @@
+# Create the index template `hamlet_template`, so that the template
+#    (i) matches any index that starts by "hamlet_" or "hamlet-",
+#    (ii) allocates one primary shard and no replicas for each
+#    matching index
+PUT _template/hamlet_template
+{
+ "index_patterns": ["hamlet_*"],
+ "settings": {
+   "number_of_shards": 1,
+   "number_of_replicas": 0
+ }
+}
+
+GET /_template/hamlet_template
+
+# Create the indices `hamlet2` and `hamlet_test`
+# Verify that only `hamlet_test` applies the settings defined in
+#    `hamlet_template`
+
+PUT /hamlet2
+
+PUT /hamlet_test
+
+
+GET /hamlet2
+
+GET /hamlet_test
+
+# Update `hamlet_template` by defining a mapping for the type
+#    "_doc", so that (i) the type has three fields, named `speaker`,
+#    `line_number`, and `text_entry`, (ii) `text_entry` uses an
+#    "english" analyzer
+
+#  Other than where documented, existing field mappings cannot be updated. Changing the mapping would mean invalidating already indexed documents. Instead, you should create a new index with the correct mappings and reindex your data into that index. If you only wish to rename a field and not change its mappings, it may make sense to introduce an alias field.
+
+PUT _template/hamlet_template/
+{
+   "index_patterns": ["hamlet_*", "hamlet-*"],
+   "settings": {
+     "number_of_shards": 1,
+     "number_of_replicas": 0
+   },
+   "mappings": {
+     "properties": {
+       "speaker": {
+           "type": "text",
+            "analyzer": "english"
+         },
+        "line_number": {
+         "type": "text",
+          "analyzer": "english"
+         },
+        "text_entry": {
+         "type": "text",
+          "analyzer": "english"
+         }
+       }
+     }
+ }
+
+# Verify that the updates in `hamlet_template` did not apply to the
+#    existing indices
+# In one request, delete both `hamlet2` and `hamlet_test`
+DELETE hamlet2
+
+DELETE hamlet_test
+
+# Verify that the mapping of `hamlet-1` is consistent with what defined in `hamlet_template`
+GET hamlet-1
+
+DELETE hamlet-1
+# Update `hamlet_template` so as to reject any document having a
+#    field that is not defined in the mapping
+
+PUT _template/hamlet_template/
+{
+   "index_patterns": ["hamlet_*", "hamlet-*"],
+   "settings": {
+     "number_of_shards": 1,
+     "number_of_replicas": 0
+   },
+   "mappings": {
+     "dynamic": false,
+     "properties": {
+       "speaker": {
+           "type": "text",
+            "analyzer": "english"
+         },
+        "line_number": {
+         "type": "text",
+          "analyzer": "english"
+         },
+        "text_entry": {
+         "type": "text",
+          "analyzer": "english"
+         }
+       }
+     }
+ }
+
+
+GET /_template/hamlet_template
+
+# Verify that you cannot index the following document in `hamlet-1`
+
+GET hamlet-1/_search
+
+PUT hamlet-1/_doc/1
+{
+ "author": "Shakespeare"
+}
+
+GET hamlet-1/_search
+
+DELETE hamlet-1/
+
+
+# Update `hamlet_template` so as to enable dynamic mapping again
+# Update `hamlet_template` so as to (i) dynamically map to an
+#    integer any field that starts by "number_", (ii) dynamically
+#    map to unanalysed text any string field
+
+
+
+PUT _template/hamlet_template/
+{
+   "index_patterns": ["hamlet_*", "hamlet-*"],
+   "settings": {
+     "number_of_shards": 1,
+     "number_of_replicas": 0
+   },
+   "mappings": {
+     "dynamic": true,
+     "dynamic_templates": [
+     {
+       "interger_as_strings": {
+         "match_mapping_type": "string",
+         "match":   "number_*",
+         "mapping": {
+           "type": "integer"
+         }
+       }
+     }
+     ],
+     "properties": {
+       "speaker": {
+           "type": "text",
+            "analyzer": "english"
+         },
+        "line_number": {
+         "type": "text",
+          "analyzer": "english"
+         },
+        "text_entry": {
+         "type": "text",
+          "analyzer": "english"
+         }
+       }
+     }
+ }
+
+# Create the index `hamlet-2` and add a document by running the
+#    following command
+
+POST hamlet-2/_doc/4
+{
+ "text_entry": "With turbulent and dangerous lunacy?",
+ "line_number": "3.1.4",
+ "number_act": "3",
+ "speaker": "KING CLAUDIUS"
+}
+
+# Verify that the mapping of `hamlet-2` is consistent with what
+#    defined in `hamlet_template`
+GET hamlet-2/
+

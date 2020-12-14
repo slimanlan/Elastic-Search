@@ -1,0 +1,239 @@
+# Create the index `hamlet_1` with one primary shard and no replicas
+# Add some documents to `hamlet_1` by running the following command
+DELETE hamlet*
+
+PUT /hamlet_1/
+{  
+ "settings" : {
+     "index" : {
+         "number_of_shards" : 1,
+         "number_of_replicas" : 0
+     }
+ }
+}
+
+GET hamlet_1/_mapping
+
+# Verify that the items of the `relationship` array cannot be
+#    searched independently - e.g., searching for a friend named
+#    Gertrude will return 1 hit
+GET hamlet_1/_search
+{
+ "query": {
+   "bool": {
+     "must": [
+       { "match": { "relationship.name": "gertrude" } },
+       { "match": { "relationship.type": "friend" } }
+     ]
+}}}
+
+# Create the index `hamlet_2` with one primary shard and no replicas
+# Define a mapping for the default type "_doc" of `hamlet_2`, so
+#    that the inner objects of the `relationship` field (i) can be
+#    searched independently, (ii) have only unanalyzed fields
+
+DELETE hamlet_2/
+
+PUT /hamlet_2/
+{  
+ "settings" : {
+     "index" : {
+         "number_of_shards" : 1,
+         "number_of_replicas" : 0
+     }
+ },
+ "mappings": {
+   "properties": {
+     "name" : { "type" : "text"},
+     "relationship": {
+       "type": "nested"
+     }
+   }
+  
+ }
+}
+
+
+
+# Reindex `hamlet_1` to `hamlet_2`
+POST _reindex
+{
+ "source": {
+   "index": "hamlet_1"
+ },
+ "dest": {
+   "index": "hamlet_2",
+   "op_type": "create"
+ }
+}
+
+GET hamlet_2/_mapping
+
+GET hamlet_2/_search
+{
+ "query": {
+   "nested": {
+     "path": "relationship",
+     "query": {
+       "bool": {
+         "must": [
+           { "match": { "relationship.name": "gertrude" }},
+           { "match": { "relationship.type":  "friend" }}
+         ]
+}}}}}
+
+
+PUT hamlet_2/_doc/_bulk
+{"index":{"_index":"hamlet_2","_id":"L0","routing":"abc"}}
+{"line_number":"1.4.1","speaker":"HAMLET","text_entry":"The air bites shrewdly; it is very cold."}
+{"index":{"_index":"hamlet_2","_id":"L1","routing":"abc"}}
+{"line_number":"1.4.2","speaker":"HORATIO","text_entry":"It is a nipping and an eager air."}
+{"index":{"_index":"hamlet_2","_id":"L2","routing":"abc"}}
+{"line_number":"1.4.3","speaker":"HAMLET","text_entry":"What hour now?"}
+
+# Create the index `hamlet_3` with only one primary shard and no
+#    replicas
+# Copy the mapping of `hamlet_2` into `hamlet_3`, but also add a
+#    join field to define a relation between a `character` (the
+#    parent) and a `line` (the child). The name of such field is
+#    "character_or_line"
+# Reindex `hamlet_2` to `hamlet_3`
+
+
+PUT /hamlet_3/
+{  
+ "settings" : {
+     "index" : {
+         "number_of_shards" : 1,
+         "number_of_replicas" : 0
+     }
+ },
+ "mappings": {
+   "properties": {
+     "line_number" : {
+         "type" : "text"
+       },
+       "name" : {
+         "type" : "text"
+       },
+       "relationship" : {
+         "type" : "nested",
+         "properties" : {
+           "name" : {
+             "type" : "text"
+           },
+           "type" : {
+             "type" : "text"
+           }
+         }
+       },
+       "speaker" : {
+         "type" : "text"
+       },
+       "text_entry" : {
+         "type" : "text"
+       },
+       "character_or_line": {
+           "type": "join",
+           "relations": {
+             "character": "line"
+           }
+         }
+   }
+ }
+}
+
+POST _reindex
+{
+ "source": {
+   "index": "hamlet_2"
+ },
+ "dest": {
+   "index": "hamlet_3",
+   "op_type": "create"
+ }
+}
+
+GET hamlet_3/_search
+
+
+
+# Create a script named `init_lines` and save it into the cluster
+#    state. The script
+#    (i)   has a parameter named `characterId`, 
+#    (ii)  adds the field `character_or_line` to the document, 
+#    (iii) sets the value of `character_or_line.name` to "line" , 
+#    (iv)  sets the value of `character_or_line.parent` to the value
+#          of the `characterId` parameter
+
+POST _scripts/init_lines
+{
+ "script": {
+   "lang": "painless",
+   "source": """
+         ctx._source['character_or_line'] = params.character_or_line;
+   """
+  
+ }
+}
+
+# Update the document with id `C0` (i.e., the character document of
+#    Hamlet) by adding the field `character_or_line` and setting its
+#    `character_or_line.name` value to "character"
+
+POST hamlet_3/_doc/C0/_update
+{
+  "doc" : {
+     "character_or_line" : {
+       "name" : "character"
+     }
+  }
+}
+
+
+GET hamlet_3/_doc/C0
+# Update the documents in `hamlet_3` that have "HAMLET" as a
+#    `speaker`, by running the `init_lines` script with
+#    `characterId` set to "C0"
+
+
+POST hamlet_3/_update_by_query?routing=abc
+{
+ "query": {
+   "match": {
+     "speaker": "HAMLET"
+     }
+ },
+ "script": {
+   "id": "init_lines",
+   "params": {
+       "character_or_line" : {
+         "name" : "line" ,
+         "parent" : "C0"
+       }
+   }
+ }
+}
+
+GET hamlet_3/_search
+{
+ "query": {
+   "match": {
+     "speaker": "HAMLET"
+     }
+ }
+}
+
+GET hamlet_3/_search
+
+# Verify the success of the previous operation using the query below
+GET hamlet_3/_search
+{
+ "query": {
+   "has_parent": {
+     "parent_type": "character",
+     "query": {
+       "match": { "name": "HAMLET" }
+     }
+}}}
+

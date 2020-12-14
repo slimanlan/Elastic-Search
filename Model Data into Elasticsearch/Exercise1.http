@@ -1,0 +1,108 @@
+# Create the index `hamlet_1` with one primary shard and no replicas
+# Define a mapping for the default type "_doc" of `hamlet_1`, so
+#    that (i) the type has three fields, named `speaker`,
+#    `line_number`, and `text_entry`, (ii) `speaker` and
+#    `line_number` are unanalysed strings
+#For not_analyzed string fields use field type keyword instead of text which is by default not_analyzed
+PUT /hamlet_1
+{
+  "settings" : {
+       "index" : {
+           "number_of_shards" : 1,
+           "number_of_replicas" : 0
+       }
+ },
+ "mappings": {
+   "properties": {
+     "speaker":    { "type": "keyword" }, 
+     "line_number":  { "type": "keyword" },
+     "text_entry":   { "type": "text"  }    
+   }
+ }
+}
+
+# Update the mapping of `hamlet_1` by disabling aggregations on
+#    `line_number`
+
+# You cannot change the type of a field once it's been created.
+# after You cannot change the type of a field once it's been created.
+# Then you'll need to re-index your data
+
+DELETE hamlet_1
+
+PUT /hamlet_1/
+{  
+   "settings" : {
+       "index" : {
+           "number_of_shards" : 1,
+           "number_of_replicas" : 0
+       }
+ },
+ "mappings": {
+   "properties": {
+     "speaker":    { "type": "keyword" }, 
+     "line_number":  { "type": "keyword", "doc_values": false },
+     "text_entry":   { "type": "text"  }    
+   }
+ }
+ 
+}
+
+GET hamlet_1
+
+GET hamlet_1/_search
+
+#Reindex does not attempt to set up the destination index. It does not copy the settings of the source index. You should set up the destination index prior to running a _reindex action, including setting up mappings, shard counts, replicas, etc.
+
+# Create the index `hamlet_2` with one primary shard and no replicas
+# Copy the mapping of `hamlet_1` into `hamlet_2`, but also define a
+#    multi-field for `speaker`. The name of such multi-field is
+#    `tokens` and its data type is the (default) analysed string
+
+PUT /hamlet_2/
+{  
+   "settings" : {
+       "index" : {
+           "number_of_shards" : 1,
+           "number_of_replicas" : 0
+       }
+ },
+ "mappings": {
+   "properties": {
+    "speaker":    {
+      "type": "keyword",  
+         "fields": {
+             "tokens": {
+               "type":  "text"
+             }
+           }
+      },     
+     "line_number":  { "type": "keyword", "doc_values": false },
+     "text_entry":   { "type": "text"  }    
+   }
+ }
+ 
+}
+
+# Reindex `hamlet_1` to `hamlet_2`
+POST _reindex
+{
+ "source": {
+   "index": "hamlet_1"
+ },
+ "dest": {
+   "index": "hamlet_2",
+   "op_type": "create"
+ }
+}
+
+# Verify that full-text queries on "speaker.tokens" are enabled on
+#    `hamlet_2` by running the following command:
+GET hamlet_2/_search
+{
+ "query": {
+   "match": { "speaker.tokens": "BERNARDO" }
+}}
+
+
+GET hamlet_2/_search

@@ -1,0 +1,57 @@
+# Creating back up.
+
+# Configure `node-1` to support a shared file system repository for 
+#    backups located in
+#    (i)  "[home_folder]/repo" and
+#    (ii) "[home_folder]/elastic/repo" - e.g., "glc/elastic/repo"
+
+# in elasticsearch.yml
+path.repo: ["/repo", "/elastic/repo"]
+
+# Create the `hamlet_backup` shared file system repository in 
+#    "[home_folder]/elastic/repo" 
+# Create a snapshot of the `hamlet` index, so that the snapshot
+#    (i)  is named `hamlet_snapshot_1`,
+#    (ii) is stored into `hamlet_backup` 
+
+PUT /_snapshot/hamlet_snapshot_1
+{
+    "type": "fs",
+    "settings": {
+        "location": "/elastic/repo/hamlet_backup",
+        "compress": true
+    }
+}
+
+# Delete the index `hamlet`
+# Restore the index `hamlet` using `hamlet_snapshot_1`
+
+POST /_snapshot/hamlet_backup/hamlet_snapshot_1/_restore
+
+# Enable cross cluster search on `eoc-06-adaptation-cluster`, so 
+#    that
+#    (i)   the name of the remote cluster is `original`,
+#    (ii)  the seed is `node-1`, which is listening on the default 
+#          transport port,
+#    (iii) the cross cluster configuration persists across multiple 
+#          restarts 
+
+PUT _cluster/settings
+{
+  "persistent": {
+    "cluster": {
+      "remote": {
+        "original": {
+          "seeds": [
+            "127.0.0.1:9300" // node1
+          ]
+        },
+        "cluster_two": {
+          "seeds": [
+            "127.0.0.1:9301"
+          ]
+        }
+      }
+    }
+  }
+}

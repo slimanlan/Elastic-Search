@@ -1,0 +1,141 @@
+# GOAL: Create, update and delete indices while satisfying a given 
+#       set of requirements
+# REQUIRED SETUP: 
+#    (i)   a running Elasticsearch cluster with at least one node 
+#         and a Kibana instance,
+#    (ii)  the cluster has no index with name `hamlet`, 
+#    (iii) the cluster has no template that applies to indices 
+#          starting by `hamlet`
+
+# Create the index `hamlet-raw` with 1 primary shard and 3 replicas
+PUT /hamlet-raw
+{
+   "settings" : {
+       "index" : {
+           "number_of_shards" : 1,
+           "number_of_replicas" : 3
+       }
+   }
+}
+
+# Add a document to `hamlet-raw`, so that the document (i) has id
+#    "1", (ii) has default type, (iii) has one field named `line`
+#    with value "To be, or not to be: that is the question"
+# default type = _doc  "of course, within its default type “_doc”.
+# PUT method for adding data
+
+PUT /hamlet-raw/_doc/1
+{
+ "line" : "To be, or not to be: that is the question"
+}
+
+
+# TIP : The update APIs are more than enough to add new fields to a document or to change some fields’ value
+
+
+# Update the document with id "1" by adding a field named
+#    `line_number` with value "3.1.64"
+POST /hamlet-raw/_update/1
+{
+ "doc" : {
+   "line_number" : "3.1.64"
+ }
+}
+
+
+# Add a new document to `hamlet-raw`, so that the document (i) has
+#    the id automatically assigned by Elasticsearch, (ii) has
+#    default type, (iii) has a field named `text_entry` with value
+#    "Whether tis nobler in the mind to suffer", (iv) has a field
+#    named `line_number` with value "3.1.66"
+
+#Required if you are using a PUT request. Omit to automatically generate an ID when using a POST request.
+
+POST /hamlet-raw/_doc/
+{
+ "text_entry" : "Whether tis nobler in the mind to suffer",
+ "line_number" : "3.1.66"
+}
+
+# Update the last document by setting the value of `line_number` to  "3.1.65"
+
+POST /hamlet-raw/_update/X5laR3IB-yMgGk2PHjy3
+{
+ "doc" : {
+   "line_number" : "3.1.65"
+ }
+}
+
+# In one request, update all documents in `hamlet-raw` by adding a
+#    new field named `speaker` with value "Hamlet"
+
+POST hamlet-raw/_update_by_query
+{
+ "script": {
+   "source": "ctx._source['speaker'] = 'Hamlet'"
+ }
+ 
+
+}
+
+# Update the document with id "1" by renaming the field `line` into  `text_entry`
+
+#  Painless scripts
+
+POST hamlet-raw/_doc/1/_update
+{
+   "script" : {
+       "source": "ctx._source.text_entry = ctx._source.line; ctx._source.remove('line')",
+       "lang": "painless"
+   }
+}
+
+# create a backup
+
+# Create a script named `set_is_hamlet` and save it into the cluster state. The script
+# (i) adds a field named `is_hamlet` to each  document,
+# (ii) sets the field to "true" if the document has `speaker` equals to "HAMLET", (iii) sets the field to "false" otherwise
+
+POST _scripts/set_is_hamlet
+{
+ "script": {
+   "lang": "painless",
+     "source": """
+           if (ctx._source.speaker== 'HAMLET') {
+              ctx._source.is_hamlet = true;
+           } else {
+              ctx._source.is_hamlet = false;
+           }
+         """
+ }
+}
+
+# verify
+GET _scripts/set_is_hamlet
+
+
+# Update all documents in `hamlet` by running the `set_is_hamlet` script
+
+
+POST hamlet/_update_by_query
+{
+  "script": {
+   "id": "set_is_hamlet"
+ }
+}
+
+
+# Remove from `hamlet` the documents that have either "KING
+#    CLAUDIUS" or "LAERTES" as the value of `speaker`
+
+POST hamlet/_delete_by_query
+{
+  "query": {
+   "bool": {
+     "should": [
+       { "match": { "speaker":   "LAERTES"  }},
+       { "match": { "speaker": "KING CLAUDIUS" }} 
+     ]
+   }
+ }
+}

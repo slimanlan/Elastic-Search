@@ -1,0 +1,70 @@
+
+# Enable xPack security on the cluster
+# Set the password of the `elastic` and `kibana` built-in users. Use
+#    the pattern "{{username}}-password" (e.g., "elastic-password")
+# Login to Kibana using the `elastic` user credentials
+
+# Solution 
+# in Elastic config file  
+# Security settings in Elasticsearch 
+# xpack.security.enabled
+# Set to true to enable Elasticsearch security features on the node.
+
+Security : xpack,
+xpack.security.enabled : true
+
+# reminder 
+# built-in user 
+POST _xpack/security/user/_password
+
+POST /_security/user/elastic/_password
+{
+    "password" : "elastic-password"
+}
+
+# Create the security role `francisco_role` in the native realm, so #    that:
+#    (i)  the role has "monitor" privileges on the cluster,
+#    (ii) the role has all privileges on the `hamlet` index
+
+POST /_security/role/francisco_role
+{
+  "cluster": ["monitor"],
+  "indices": [
+    {
+      "names": [ "hamlet"],
+      "privileges": ["all"]  
+    }
+  ]
+}
+
+# useful links 
+
+# https://www.elastic.co/guide/en/elasticsearch/reference/current/get-started-users.html
+# https://www.elastic.co/guide/en/elasticsearch/reference/current/get-started-roles.html
+
+# Create the security role `bernardo_role` in the native realm, so 
+#    that:
+#    (i)   the role has "monitor" privileges on the cluster,
+#    (ii)  the role has read-only privileges on the `hamlet` index,
+#    (iii) the role can see only those documents having "BERNARDO" 
+#          as a `speaker`,
+#    (iv)  the role can see only the `text_entry` field
+POST /_security/role/francisco_role
+{
+  "cluster": ["monitor"],
+  "indices": [
+    {
+      "names": [ "hamlet"],
+      "privileges": ["read"],"field_security": { 
+        "grant" : [ "text_entry" ]
+    }, "query": "{\"match\": {\"speaker\": \"BERNARDO\"}}"  
+    }
+  ]
+}
+
+# Change the password of the `bernardo` user to "poor-bernardo"
+
+POST /_xpack/security/user/bernardo/_password
+{
+  "password" : "poor-bernardo"
+}
